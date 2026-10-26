@@ -107,20 +107,69 @@ if [[ "$rc" -ne 0 ]]; then
 fi
 
 echo
-echo "===== GDSII outputs ====="
-mapfile -t GDS_FILES < <(find "$PROJECT/openlane/runs" -type f -name '*.gds' -print 2>/dev/null | sort)
+echo "===== Locate final GDS and netlist views ====="
+mapfile -t GDS_FILES < <(find "$PROJECT/openlane/runs" -type f -path '*/final/gds/*.gds' -print 2>/dev/null | sort)
 if [[ ${#GDS_FILES[@]} -eq 0 ]]; then
-  echo "OpenLane returned success, but no .gds file was found; inspect run metrics and logs." >&2
+  echo "OpenLane returned success, but no final GDS was found; inspect run logs and the final/ folder." >&2
   exit 20
 fi
-printf '%s\n' "${GDS_FILES[@]}"
+
+# Use the run that produced the discovered GDS, then collect sign-off-relevant views.
+RUN_DIR="$(dirname -- "$(dirname -- "$(dirname -- "${GDS_FILES[0]}")")")"
+RUN_ID="$(basename -- "$RUN_DIR")"
+ARTIFACT_DIR="$WORK_ROOT/artifacts/$RUN_ID"
+mkdir -p "$ARTIFACT_DIR"
+
+echo "Run directory: $RUN_DIR"
+echo "Artifact export: $ARTIFACT_DIR"
+
+for file in "${GDS_FILES[@]}"; do
+  cp -f "$file" "$ARTIFACT_DIR/"
+  echo "GDS: $file"
+done
+
+copy_views() {
+  local source_dir="$1"
+  local pattern="$2"
+  local label="$3"
+  local count=0
+  if [[ -d "$source_dir" ]]; then
+    while IFS= read -r -d '' file; do
+      cp -f "$file" "$ARTIFACT_DIR/"
+      echo "$label: $file"
+      ((count+=1))
+    done < <(find "$source_dir" -maxdepth 1 -type f -name "$pattern" -print0)
+  fi
+  if [[ "$count" -eq 0 ]]; then
+    echo "NOTE: no $label found under $source_dir"
+  fi
+}
+
+copy_views "$RUN_DIR/final/nl" '*.nl.v' 'Gate-level netlist'
+copy_views "$RUN_DIR/final/pnl" '*.pnl.v' 'Post-route netlist'
+copy_views "$RUN_DIR/final/def" '*.def' 'Final DEF'
+copy_views "$RUN_DIR/final/lef" '*.lef' 'Final LEF'
+
+for file in "$RUN_DIR/final/metrics.json" "$RUN_DIR/final/metrics.csv"; do
+  [[ -f "$file" ]] && cp -f "$file" "$ARTIFACT_DIR/"
+done
+for dir in "$RUN_DIR/reports" "$RUN_DIR/logs"; do
+  if [[ -d "$dir" ]]; then
+    mkdir -p "$ARTIFACT_DIR/$(basename "$dir")"
+    cp -a "$dir/." "$ARTIFACT_DIR/$(basename "$dir")/"
+  fi
+done
 
 echo
-echo "===== Metrics, timing and physical-check reports ====="
-find "$PROJECT/openlane/runs" -type f \
+echo "===== Exported artifacts ====="
+find "$ARTIFACT_DIR" -maxdepth 2 -type f -printf '%P (%s bytes)\\n' | sort
+
+echo
+echo "===== Useful run reports ====="
+find "$RUN_DIR" -type f \
   \( -name 'metrics.json' -o -name '*.rpt' -o -iname '*drc*' -o -iname '*lvs*' -o -iname '*antenna*' \) \
   -print 2>/dev/null | sort || true
 
 echo
-echo "GDS file(s) were produced. This exploratory relative-floorplan run is not by itself proof of Tiny Tapeout fit or tapeout signoff."
-echo "Review the final metrics for timing, route completion, DRC, LVS, antenna checks and area."
+echo "Artifacts were exported. This exploratory relative-floorplan run is not by itself proof of Tiny Tapeout fit or tapeout signoff."
+echo "Review timing, routing, DRC, LVS, antenna, and area results before calling the design tapeout-ready."
