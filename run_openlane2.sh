@@ -56,7 +56,7 @@ design = cfg.get("DESIGN_NAME")
 source_text = top_path.read_text()
 if not design:
     raise SystemExit("ERROR: DESIGN_NAME missing in config.json")
-if not re.search(r"\\bmodule\\s+" + re.escape(design) + r"\\b", source_text):
+if not re.search(r"\bmodule\s+ + re.escape(design) + r"\\b", source_text):
     raise SystemExit(f"ERROR: DESIGN_NAME={design!r} not declared in {top_path.name}")
 print(f"DESIGN_NAME={design} matches the top module source.")
 print(f"CLOCK_PORT={cfg.get('CLOCK_PORT')}; CLOCK_PERIOD={cfg.get('CLOCK_PERIOD')} ns")
