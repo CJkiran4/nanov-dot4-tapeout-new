@@ -47,7 +47,7 @@ echo "===== Sync and validate Tiny Tapeout RTL copies ====="
 # Stage a fresh copy inside openlane/src and adjust only the extracted working copy.
 SOURCE_DIR="$PROJECT/openlane/src"
 mkdir -p "$SOURCE_DIR"
-find "$SOURCE_DIR" -maxdepth 1 -type f \\
+find "$SOURCE_DIR" -maxdepth 1 -type f \
   \( -name '*.v' -o -name '*.sv' -o -name '*.vh' -o -name '*.svh' \) -delete
 shopt -s nullglob
 RTL_FILES=( "$PROJECT/tt/src/"*.v )
@@ -64,7 +64,7 @@ from pathlib import Path
 path = Path(sys.argv[1])
 cfg = json.loads(path.read_text())
 cfg["VERILOG_FILES"] = "dir::src/*.v"
-path.write_text(json.dumps(cfg, indent=2) + "\\n")
+path.write_text(json.dumps(cfg, indent=2) + "\n")
 print("Prepared working config: VERILOG_FILES=dir::src/*.v")
 PY
 
