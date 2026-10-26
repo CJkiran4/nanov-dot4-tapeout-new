@@ -42,6 +42,32 @@ echo "===== Sync and validate Tiny Tapeout RTL copies ====="
   bash scripts/sync_tt_src.sh
 )
 
+# OpenLane 2 restricts JSON-configured source globs to files inside DESIGN_DIR.
+# The archive originally points to ../tt/src/*.v, which OpenLane rejects.
+# Stage a fresh copy inside openlane/src and adjust only the extracted working copy.
+SOURCE_DIR="$PROJECT/openlane/src"
+mkdir -p "$SOURCE_DIR"
+find "$SOURCE_DIR" -maxdepth 1 -type f \\
+  \( -name '*.v' -o -name '*.sv' -o -name '*.vh' -o -name '*.svh' \) -delete
+shopt -s nullglob
+RTL_FILES=( "$PROJECT/tt/src/"*.v )
+shopt -u nullglob
+[[ ${#RTL_FILES[@]} -gt 0 ]] || die "No .v source files found under $PROJECT/tt/src"
+cp -f "${RTL_FILES[@]}" "$SOURCE_DIR/"
+echo "Staged ${#RTL_FILES[@]} Verilog source files inside $SOURCE_DIR"
+
+python3 - "$PROJECT/openlane/config.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+cfg = json.loads(path.read_text())
+cfg["VERILOG_FILES"] = "dir::src/*.v"
+path.write_text(json.dumps(cfg, indent=2) + "\\n")
+print("Prepared working config: VERILOG_FILES=dir::src/*.v")
+PY
+
 echo
 echo "===== Verify OpenLane design config and top module ====="
 python3 - "$PROJECT/openlane/config.json" "$PROJECT/tt/src/tt_um_nanov_dot4_accel.v" <<'PY'
