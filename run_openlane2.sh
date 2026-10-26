@@ -15,17 +15,17 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 
 [[ -f "$ARCHIVE" ]] || die "Missing archive: $ARCHIVE"
 command -v tar >/dev/null 2>&1 || die "tar is required"
-command -v openlane >/dev/null 2>&1 || die "OpenLane 2 is not in PATH. Activate your OpenLane venv first."
+command -v python3 >/dev/null 2>&1 || die "python3 is required"
+command -v openlane >/dev/null 2>&1 || die "OpenLane 2 is not in PATH. Activate your OpenLane virtual environment first."
 command -v docker >/dev/null 2>&1 || die "Docker CLI not found. Install Docker or Docker Desktop + WSL integration."
 docker info >/dev/null 2>&1 || die "Docker daemon is not reachable. Start Docker and verify 'docker info'."
 
 mkdir -p "$WORK_ROOT" "$LOG_DIR"
 
-# Re-extract so the run uses the archive's exact project contents.
-# The clone/repository folder is not overwritten; extraction goes into WORK_ROOT.
+# Re-extract to a dedicated work folder; do not change the cloned Git repository.
 tar -xzf "$ARCHIVE" -C "$WORK_ROOT"
 [[ -f "$PROJECT/openlane/config.json" ]] || die "Expected OpenLane config not found under $PROJECT/openlane"
-[[ -x "$PROJECT/openlane/run_openlane.sh" || -f "$PROJECT/openlane/run_openlane.sh" ]] || die "OpenLane runner script is missing"
+[[ -f "$PROJECT/openlane/run_openlane.sh" ]] || die "OpenLane runner script is missing"
 
 export PDK="${PDK:-sky130A}"
 export PDK_ROOT="${PDK_ROOT:-$HOME/.volare}"
@@ -34,6 +34,7 @@ echo "Project: $PROJECT"
 echo "PDK: $PDK"
 echo "PDK_ROOT: $PDK_ROOT"
 echo "Log: $LOG_FILE"
+
 echo
 echo "===== Sync and validate Tiny Tapeout RTL copies ====="
 (
@@ -56,7 +57,7 @@ design = cfg.get("DESIGN_NAME")
 source_text = top_path.read_text()
 if not design:
     raise SystemExit("ERROR: DESIGN_NAME missing in config.json")
-if not re.search(r"\bmodule\s+ + re.escape(design) + r"\\b", source_text):
+if not re.search(r'\bmodule\s+' + re.escape(design) + r'\b', source_text):
     raise SystemExit(f"ERROR: DESIGN_NAME={design!r} not declared in {top_path.name}")
 print(f"DESIGN_NAME={design} matches the top module source.")
 print(f"CLOCK_PORT={cfg.get('CLOCK_PORT')}; CLOCK_PERIOD={cfg.get('CLOCK_PERIOD')} ns")
@@ -68,13 +69,12 @@ echo "===== Run OpenLane 2 ====="
 set +e
 (
   cd "$PROJECT/openlane"
-  ./run_openlane.sh
+  bash ./run_openlane.sh
 ) 2>&1 | tee "$LOG_FILE"
 rc=${PIPESTATUS[0]}
 set -e
 
 if [[ "$rc" -ne 0 ]]; then
-  echo
   echo "OpenLane failed with exit code $rc. Log: $LOG_FILE" >&2
   echo "Inspect the first error in the log before changing RTL or constraints." >&2
   exit "$rc"
@@ -91,10 +91,10 @@ printf '%s\n' "${GDS_FILES[@]}"
 
 echo
 echo "===== Metrics, timing and physical-check reports ====="
-find "$PROJECT/openlane/runs" -type f \\
-  \( -name 'metrics.json' -o -name '*.rpt' -o -iname '*drc*' -o -iname '*lvs*' -o -iname '*antenna*' \) \\
+find "$PROJECT/openlane/runs" -type f \
+  \( -name 'metrics.json' -o -name '*.rpt' -o -iname '*drc*' -o -iname '*lvs*' -o -iname '*antenna*' \) \
   -print 2>/dev/null | sort || true
 
 echo
-echo "Flow finished and produced GDS output. This exploratory relative-floorplan run is not by itself proof of Tiny Tapeout fit or tapeout signoff."
-echo "Review the final metrics for setup/hold timing, route completion, DRC, LVS, antenna checks and area."
+echo "GDS file(s) were produced. This exploratory relative-floorplan run is not by itself proof of Tiny Tapeout fit or tapeout signoff."
+echo "Review the final metrics for timing, route completion, DRC, LVS, antenna checks and area."
